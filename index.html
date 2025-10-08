@@ -6,6 +6,7 @@
     <title>RoZa Festival 2026 - Line-up Planner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -39,6 +40,20 @@
         .roza-bg {
             background: linear-gradient(135deg, #FFB7B2 0%, #FF9AA2 50%, #FFDAC1 100%);
         }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1a2238;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -46,48 +61,28 @@
 
     <script>
         // ============================================
-        // 🎵 CONFIGURATIE - PAS DIT AAN NAAR WENS
+        // 🎵 CONFIGURATIE - VASTE INSTELLINGEN
         // ============================================
-        const CONFIG = {
+        
+        // VERVANG DEZE URL MET JOUW GOOGLE SHEET URL (zie instructies hieronder)
+        const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQlf_lAOPrCrIq-vQ5To-129nW60GhxMh5w_j4x6uRHQnV8lPXSAxXkgcQjbS8qWlBBBy-DNTVP7l02/pub?gid=0&single=true&output=csv';
+        
+        // Fallback data als Google Sheet niet beschikbaar is
+        const FALLBACK_CONFIG = {
             festivalNaam: "RoZa Festival",
             datum: "12 september 2026",
             locatie: "Zammel, Geel",
-            totaleBudget: 10000,
-            
-            // Voeg hier bands toe of wijzig prijzen
-            bands: [
-                { name: "Transistor", price: 500, category: "lokaal", info: "nog marge", viable: true },
-                { name: "Komisar", price: 500, category: "lokaal", info: "", viable: true },
-                { name: "The Yummy Mouths", price: 1020, category: "middenklasse", info: "", viable: true },
-                { name: "Absynthe Minded", price: 18150, category: "Headliner", info: "nieuw album 2026", viable: false },
-                { name: "Frans Kalf", price: 0, category: "kerk", info: "Mayway Recs signing", viable: true },
-                { name: "RHEA", price: 4840, category: "(sub) Headliner", info: "Gaat daarna in pauze!", viable: true },
-                { name: "WASTE", price: 1210, category: "(sub) Headliner", info: "Nieuwe plaat 6 maart", viable: true },
-                { name: "Ão", price: 0, category: "", info: "prijs opvragen", viable: true },
-                { name: "Borokov Borokov", price: 0, category: "", info: "prijs opvragen", viable: true },
-                { name: "Jean Valery", price: 0, category: "", info: "prijs opvragen", viable: true },
-                { name: "Johannes is Zijn Naam", price: 0, category: "", info: "prijs opvragen", viable: true },
-                { name: "Tangled Horns", price: 0, category: "", info: "Tijs Vaneste programma 2026", viable: true },
-                { name: "The Hickey Underworld", price: 6200, category: "", info: "Nieuw album 2026", viable: true },
-                { name: "Diego & The Dinosaurs", price: 0, category: "Lokaal", info: "Punkrock Larum", viable: true },
-                { name: "FIXKES", price: 3400, category: "(sub) Headliner", info: "", viable: true },
-                { name: "Sons", price: 20400, category: "Headliner", info: "", viable: false },
-                { name: "Young Yello", price: 34000, category: "Headliner", info: "", viable: false },
-                { name: "Portland", price: 40800, category: "Headliner", info: "", viable: false },
-                { name: "ILA", price: 0, category: "", info: "prijs opvragen", viable: true },
-                { name: "Woodsmith Jr.", price: 302.5, category: "lokaal", info: "", viable: true },
-                { name: "Customs", price: 4760, category: "(sub) Headliner", info: "", viable: true },
-                { name: "Discobar Galaxy", price: 5440, category: "", info: "", viable: true },
-                { name: "Ertebrekers", price: 8160, category: "", info: "", viable: false },
-                { name: "Fred Gata", price: 2040, category: "", info: "", viable: true },
-                { name: "Hairbaby", price: 4080, category: "", info: "", viable: true },
-                { name: "High Hi", price: 9520, category: "LiveNation", info: "", viable: false },
-                { name: "IBE", price: 3400, category: "LiveNation", info: "", viable: true },
-                { name: "Iskander Moon", price: 0, category: "LiveNation", info: "prijs opvragen", viable: true },
-                { name: "Milo Meskens", price: 4760, category: "LiveNation", info: "", viable: true },
-                { name: "The Radar Station", price: 2720, category: "LiveNation", info: "", viable: true },
-            ]
+            totaleBudget: 10000
         };
+
+        const FALLBACK_BANDS = [
+            { name: "Transistor", price: 500, category: "lokaal", info: "nog marge", viable: true },
+            { name: "Komisar", price: 500, category: "lokaal", info: "", viable: true },
+            { name: "The Yummy Mouths", price: 1020, category: "middenklasse", info: "", viable: true },
+            { name: "RHEA", price: 4840, category: "(sub) Headliner", info: "Gaat daarna in pauze!", viable: true },
+            { name: "WASTE", price: 1210, category: "(sub) Headliner", info: "Nieuwe plaat 6 maart", viable: true },
+            { name: "Woodsmith Jr.", price: 302.5, category: "lokaal", info: "", viable: true },
+        ];
 
         // ============================================
         // 📱 APPLICATIE CODE
@@ -95,18 +90,105 @@
         class FestivalApp {
             constructor() {
                 this.currentUser = localStorage.getItem('roza_user') || null;
-                this.scenarios = this.loadScenarios();
-                this.activeScenarioId = parseInt(localStorage.getItem('roza_active_scenario')) || 1;
+                this.scenarios = [];
+                this.activeScenarioId = 1;
                 this.showPosterView = false;
                 this.draggedBand = null;
                 this.dragSource = null;
                 this.editingScenarioId = null;
                 this.editName = '';
+                this.isLoading = true;
+                this.CONFIG = null;
+                this.allBands = [];
                 
+                this.init();
+            }
+
+            async init() {
                 if (!this.currentUser) {
                     this.showLoginPrompt();
                 } else {
+                    this.showLoadingScreen();
+                    await this.loadDataFromGoogleSheets();
+                    this.scenarios = this.loadScenarios();
+                    this.activeScenarioId = parseInt(localStorage.getItem('roza_active_scenario')) || 1;
+                    this.isLoading = false;
                     this.render();
+                }
+            }
+
+            showLoadingScreen() {
+                const app = document.getElementById('app');
+                app.innerHTML = `
+                    <div class="min-h-screen flex items-center justify-center roza-bg">
+                        <div class="bg-white rounded-3xl shadow-2xl p-10 max-w-md w-full text-center">
+                            <div class="loading-spinner mx-auto mb-4"></div>
+                            <p class="text-xl font-bold roza-title">Bands laden...</p>
+                            <p class="text-gray-600 mt-2">Even geduld terwijl we de laatste data ophalen</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            async loadDataFromGoogleSheets() {
+                try {
+                    // Check if using default placeholder URL
+                    if (GOOGLE_SHEET_URL.includes('YOUR_SHEET_ID_HERE')) {
+                        console.log('Google Sheet URL not configured, using fallback data');
+                        this.CONFIG = FALLBACK_CONFIG;
+                        this.allBands = FALLBACK_BANDS;
+                        return;
+                    }
+
+                    const response = await fetch(GOOGLE_SHEET_URL);
+                    const csvText = await response.text();
+                    
+                    const parsed = Papa.parse(csvText, {
+                        header: true,
+                        dynamicTyping: true,
+                        skipEmptyLines: true
+                    });
+
+                    if (parsed.data && parsed.data.length > 0) {
+                        // First row might contain config
+                        const firstRow = parsed.data[0];
+                        
+                        if (firstRow.festivalNaam) {
+                            // Config row
+                            this.CONFIG = {
+                                festivalNaam: firstRow.festivalNaam || FALLBACK_CONFIG.festivalNaam,
+                                datum: firstRow.datum || FALLBACK_CONFIG.datum,
+                                locatie: firstRow.locatie || FALLBACK_CONFIG.locatie,
+                                totaleBudget: firstRow.totaleBudget || FALLBACK_CONFIG.totaleBudget
+                            };
+                            // Rest are bands
+                            this.allBands = parsed.data.slice(1).map(row => ({
+                                name: row.name || row.Artiest || '',
+                                price: parseFloat(row.price || row.Prijs || row.volledige_prijs || 0),
+                                category: row.category || row.Categorie || '',
+                                info: row.info || row.extra_info || '',
+                                viable: row.viable === true || row.viable === 'true' || row.viable === 1 || row.viable === '1'
+                            })).filter(band => band.name);
+                        } else {
+                            // No config row, all bands
+                            this.CONFIG = FALLBACK_CONFIG;
+                            this.allBands = parsed.data.map(row => ({
+                                name: row.name || row.Artiest || '',
+                                price: parseFloat(row.price || row.Prijs || row['volledige prijs'] || 0),
+                                category: row.category || row.Categorie || '',
+                                info: row.info || row['extra info'] || '',
+                                viable: row.viable === true || row.viable === 'true' || row.viable === 1 || row.viable === '1'
+                            })).filter(band => band.name);
+                        }
+                    } else {
+                        throw new Error('No data found in sheet');
+                    }
+
+                    console.log('✅ Data loaded from Google Sheets:', this.allBands.length, 'bands');
+                } catch (error) {
+                    console.warn('⚠️ Could not load Google Sheet, using fallback data:', error.message);
+                    this.CONFIG = FALLBACK_CONFIG;
+                    this.allBands = FALLBACK_BANDS;
                 }
             }
 
@@ -118,7 +200,7 @@
                             <h1 class="text-5xl font-bold mb-3 text-center roza-title">
                                 Hey RoZa,<br>you're in!
                             </h1>
-                            <p class="text-gray-600 text-center mb-8 text-lg">${CONFIG.datum}</p>
+                            <p class="text-gray-600 text-center mb-8 text-lg">Line-up Planner</p>
                             <div class="mb-6">
                                 <label class="block text-sm font-bold text-gray-700 mb-3">
                                     Jouw naam:
@@ -141,11 +223,16 @@
                 `;
             }
 
-            login() {
+            async login() {
                 const username = document.getElementById('username').value.trim();
                 if (username) {
                     this.currentUser = username;
                     localStorage.setItem('roza_user', username);
+                    this.showLoadingScreen();
+                    await this.loadDataFromGoogleSheets();
+                    this.scenarios = this.loadScenarios();
+                    this.activeScenarioId = parseInt(localStorage.getItem('roza_active_scenario')) || 1;
+                    this.isLoading = false;
                     this.render();
                 }
             }
@@ -165,15 +252,15 @@
                 }
                 
                 const initialMainstage = [
-                    CONFIG.bands.find(b => b.name === "Transistor"),
-                    CONFIG.bands.find(b => b.name === "Komisar")
-                ];
+                    this.allBands.find(b => b.name === "Transistor"),
+                    this.allBands.find(b => b.name === "Komisar")
+                ].filter(Boolean);
                 
                 const initialKerk = [
-                    CONFIG.bands.find(b => b.name === "Woodsmith Jr.")
-                ];
+                    this.allBands.find(b => b.name === "Woodsmith Jr.")
+                ].filter(Boolean);
 
-                const initialAvailable = CONFIG.bands.filter(b => 
+                const initialAvailable = this.allBands.filter(b => 
                     b.name !== "Transistor" && 
                     b.name !== "Komisar" && 
                     b.name !== "Woodsmith Jr."
@@ -263,7 +350,7 @@
 
             addScenario() {
                 const newId = Math.max(...this.scenarios.map(s => s.id)) + 1;
-                const initialAvailable = CONFIG.bands.filter(b => 
+                const initialAvailable = this.allBands.filter(b => 
                     b.name !== "Transistor" && 
                     b.name !== "Komisar" && 
                     b.name !== "Woodsmith Jr."
@@ -275,10 +362,10 @@
                     createdBy: this.currentUser,
                     createdAt: new Date().toISOString(),
                     mainstage: [
-                        CONFIG.bands.find(b => b.name === "Transistor"),
-                        CONFIG.bands.find(b => b.name === "Komisar")
-                    ],
-                    kerk: [CONFIG.bands.find(b => b.name === "Woodsmith Jr.")],
+                        this.allBands.find(b => b.name === "Transistor"),
+                        this.allBands.find(b => b.name === "Komisar")
+                    ].filter(Boolean),
+                    kerk: [this.allBands.find(b => b.name === "Woodsmith Jr.")].filter(Boolean),
                     available: initialAvailable
                 });
                 this.activeScenarioId = newId;
@@ -337,7 +424,6 @@
                 let newKerk = [...scenario.kerk];
                 let newAvailable = [...scenario.available];
 
-                // Remove from source
                 if (this.dragSource === 'available') {
                     newAvailable = newAvailable.filter(b => b.name !== this.draggedBand.name);
                 } else if (this.dragSource === 'mainstage') {
@@ -346,7 +432,6 @@
                     newKerk = newKerk.filter(b => b.name !== this.draggedBand.name);
                 }
 
-                // Add to target
                 if (targetZone === 'mainstage') {
                     if (targetIndex !== null) {
                         newMainstage.splice(targetIndex, 0, this.draggedBand);
@@ -382,7 +467,6 @@
                     <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                         <div class="bg-white rounded-3xl p-8 max-w-3xl">
                             <div id="poster" class="relative rounded-3xl overflow-hidden" style="width: 700px; height: 900px; background-color: #FFB7B2;">
-                                <!-- Diagonal stripes background -->
                                 <div style="position: absolute; width: 200%; height: 200%; top: -50%; left: -50%; transform: rotate(45deg); z-index: 0;">
                                     <div style="background: #FF9AA2; height: 100px;"></div>
                                     <div style="background: #FFB7B2; height: 100px;"></div>
@@ -398,26 +482,21 @@
                                     <div style="background: #FFB7B2; height: 100px;"></div>
                                 </div>
                                 
-                                <!-- Content -->
                                 <div style="position: relative; z-index: 10; padding: 4rem;">
-                                    <!-- Title -->
                                     <h1 style="font-family: 'Fredoka', sans-serif; font-size: 4.5rem; font-weight: 700; color: #1a2238; text-align: center; margin: 0 0 2rem 0; line-height: 1.1;">
                                         Line-up<br>RoZa 2026
                                     </h1>
                                     
-                                    <!-- Date box -->
                                     <div style="background: #FFFFFF; border-radius: 1rem; padding: 1.5rem; margin: 0 auto 3rem auto; max-width: 400px;">
                                         <p style="font-family: 'Fredoka', sans-serif; font-size: 2rem; font-weight: 700; color: #1a2238; text-align: center; margin: 0 0 0.5rem 0;">
-                                            ${CONFIG.datum}
+                                            ${this.CONFIG.datum}
                                         </p>
                                         <p style="font-family: 'Fredoka', sans-serif; font-size: 1.25rem; font-weight: 400; color: #1a2238; text-align: center; margin: 0;">
-                                            ${CONFIG.locatie}
+                                            ${this.CONFIG.locatie}
                                         </p>
                                     </div>
 
-                                    <!-- Line-up boxes -->
                                     <div style="display: flex; gap: 2rem; margin-bottom: 2rem;">
-                                        <!-- Mainstage -->
                                         <div style="flex: 1; background: #1a2238; padding: 1.5rem; border-radius: 1rem;">
                                             <h2 style="font-family: 'Fredoka', sans-serif; font-size: 1.5rem; font-weight: 700; color: #FFB7B2; border-bottom: 2px solid #FFB7B2; padding-bottom: 0.5rem; margin: 0 0 1rem 0;">
                                                 🎸 MAINSTAGE
@@ -429,7 +508,6 @@
                                             `).join('')}
                                         </div>
 
-                                        <!-- Kerk -->
                                         <div style="flex: 1; background: #1a2238; padding: 1.5rem; border-radius: 1rem;">
                                             <h2 style="font-family: 'Fredoka', sans-serif; font-size: 1.5rem; font-weight: 700; color: #FFB7B2; border-bottom: 2px solid #FFB7B2; padding-bottom: 0.5rem; margin: 0 0 1rem 0;">
                                                 ⛪ KERK
@@ -442,7 +520,6 @@
                                         </div>
                                     </div>
 
-                                    <!-- Bottom info -->
                                     <div style="background: #FFFFFF; border-radius: 1rem; padding: 1rem;">
                                         <p style="font-family: 'Fredoka', sans-serif; font-size: 0.875rem; font-weight: 600; color: #1a2238; text-align: center; margin: 0;">
                                             ${scenario.name} • €${mainstageTotal + kerkTotal} budget
@@ -462,13 +539,13 @@
             }
 
             render() {
-                if (!this.currentUser) return;
+                if (!this.currentUser || this.isLoading) return;
 
                 const scenario = this.getActiveScenario();
                 const mainstageTotal = scenario.mainstage.reduce((s, b) => s + b.price, 0);
                 const kerkTotal = scenario.kerk.reduce((s, b) => s + b.price, 0);
                 const totalSpent = mainstageTotal + kerkTotal;
-                const remaining = CONFIG.totaleBudget - totalSpent;
+                const remaining = this.CONFIG.totaleBudget - totalSpent;
 
                 const kanshebbers = scenario.available.filter(b => b.viable).sort((a, b) => b.price - a.price);
                 const nietVoorRoza = scenario.available.filter(b => !b.viable).sort((a, b) => b.price - a.price);
@@ -479,11 +556,10 @@
                     
                     <div class="min-h-screen roza-bg p-6">
                         <div class="max-w-7xl mx-auto">
-                            <!-- Header -->
                             <div class="flex justify-between items-center mb-6">
                                 <div>
                                     <h1 class="text-5xl font-bold roza-title">Hey RoZa, you're in!</h1>
-                                    <p class="text-[#1a2238] text-lg font-semibold opacity-80">${CONFIG.datum} • ${CONFIG.locatie}</p>
+                                    <p class="text-[#1a2238] text-lg font-semibold opacity-80">${this.CONFIG.datum} • ${this.CONFIG.locatie}</p>
                                 </div>
                                 <div class="flex items-center gap-4">
                                     <button onclick="app.importScenario()" 
@@ -504,7 +580,6 @@
                                 </div>
                             </div>
 
-                            <!-- Scenario Tabs -->
                             <div class="bg-white rounded-2xl shadow-lg p-4 mb-6">
                                 <div class="flex items-center gap-2 overflow-x-auto pb-2">
                                     ${this.scenarios.map(s => `
@@ -561,12 +636,11 @@
                                 </div>
                             </div>
 
-                            <!-- Budget KPIs -->
                             <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
                                 <div class="grid grid-cols-4 gap-4">
                                     <div class="text-center bg-[#FFE5E5] rounded-2xl p-4">
                                         <div class="text-sm text-[#1a2238] mb-1 font-semibold">Totaal Budget</div>
-                                        <div class="text-3xl font-bold roza-title">€${CONFIG.totaleBudget}</div>
+                                        <div class="text-3xl font-bold roza-title">€${this.CONFIG.totaleBudget}</div>
                                     </div>
                                     <div class="text-center bg-[#E3F2FD] rounded-2xl p-4">
                                         <div class="text-sm text-[#1a2238] mb-1 font-semibold">Mainstage</div>
@@ -590,9 +664,7 @@
                                 </div>
                             </div>
 
-                            <!-- Main Grid -->
                             <div class="grid grid-cols-3 gap-6">
-                                <!-- Mainstage -->
                                 <div class="bg-white rounded-2xl shadow-lg p-6">
                                     <h2 class="text-3xl font-bold roza-title mb-4 flex items-center gap-2">
                                         🎸 Mainstage
@@ -634,7 +706,6 @@
                                     </div>
                                 </div>
 
-                                <!-- Kerk -->
                                 <div class="bg-white rounded-2xl shadow-lg p-6">
                                     <h2 class="text-3xl font-bold roza-title mb-4 flex items-center gap-2">
                                         ⛪ Kerk
@@ -676,14 +747,12 @@
                                     </div>
                                 </div>
 
-                                <!-- Available -->
                                 <div class="bg-white rounded-2xl shadow-lg p-6">
                                     <h2 class="text-3xl font-bold roza-title mb-4 flex items-center gap-2">
                                         💰 Beschikbaar
                                     </h2>
                                     
                                     <div class="space-y-6 max-h-[600px] overflow-y-auto">
-                                        <!-- Kanshebbers -->
                                         <div>
                                             <div class="flex items-center gap-2 mb-3 sticky top-0 bg-white py-2 z-10">
                                                 <span class="text-yellow-500">⭐</span>
@@ -716,7 +785,6 @@
                                             </div>
                                         </div>
 
-                                        <!-- Niet voor RoZa -->
                                         <div>
                                             <div class="flex items-center gap-2 mb-3 sticky top-0 bg-white py-2 z-10">
                                                 <span class="text-red-500">❌</span>
@@ -757,7 +825,6 @@
             }
         }
 
-        // Initialize app
         const app = new FestivalApp();
         window.app = app;
     </script>
