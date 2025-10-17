@@ -248,18 +248,38 @@
             loadScenarios() {
                 const saved = localStorage.getItem('roza_scenarios');
                 if (saved) {
-                    return JSON.parse(saved);
+                    try {
+                        const scenarios = JSON.parse(saved);
+                        // Update prices in saved scenarios with current data from Google Sheets
+                        return scenarios.map(scenario => {
+                            return {
+                                ...scenario,
+                                mainstage: scenario.mainstage.map(band => {
+                                    const updated = this.allBands.find(b => b.name === band.name);
+                                    return updated || band;
+                                }),
+                                kerk: scenario.kerk.map(band => {
+                                    const updated = this.allBands.find(b => b.name === band.name);
+                                    return updated || band;
+                                }),
+                                available: scenario.available.map(band => {
+                                    const updated = this.allBands.find(b => b.name === band.name);
+                                    return updated || band;
+                                })
+                            };
+                        });
+                    } catch (e) {
+                        console.error('Error loading saved scenarios:', e);
+                    }
                 }
                 
-                const initialMainstage = [
-                    this.allBands.find(b => b.name === "Transistor"),
-                    this.allBands.find(b => b.name === "Komisar")
-                ].filter(Boolean);
+                // Create initial scenario with bands from Google Sheets
+                const transistor = this.allBands.find(b => b.name === "Transistor");
+                const komisar = this.allBands.find(b => b.name === "Komisar");
+                const woodsmith = this.allBands.find(b => b.name === "Woodsmith Jr.");
                 
-                const initialKerk = [
-                    this.allBands.find(b => b.name === "Woodsmith Jr.")
-                ].filter(Boolean);
-
+                const initialMainstage = [transistor, komisar].filter(Boolean);
+                const initialKerk = [woodsmith].filter(Boolean);
                 const initialAvailable = this.allBands.filter(b => 
                     b.name !== "Transistor" && 
                     b.name !== "Komisar" && 
@@ -310,6 +330,21 @@
                             const newId = Math.max(...this.scenarios.map(s => s.id)) + 1;
                             scenario.id = newId;
                             scenario.name = `${scenario.name} (geïmporteerd)`;
+                            
+                            // Update prices with current data from Google Sheets
+                            scenario.mainstage = scenario.mainstage.map(band => {
+                                const updated = this.allBands.find(b => b.name === band.name);
+                                return updated || band;
+                            });
+                            scenario.kerk = scenario.kerk.map(band => {
+                                const updated = this.allBands.find(b => b.name === band.name);
+                                return updated || band;
+                            });
+                            scenario.available = scenario.available.map(band => {
+                                const updated = this.allBands.find(b => b.name === band.name);
+                                return updated || band;
+                            });
+                            
                             this.scenarios.push(scenario);
                             this.activeScenarioId = newId;
                             this.saveScenarios();
@@ -350,6 +385,14 @@
 
             addScenario() {
                 const newId = Math.max(...this.scenarios.map(s => s.id)) + 1;
+                
+                // Gebruik de actuele data uit this.allBands (geladen van Google Sheets)
+                const transistor = this.allBands.find(b => b.name === "Transistor");
+                const komisar = this.allBands.find(b => b.name === "Komisar");
+                const woodsmith = this.allBands.find(b => b.name === "Woodsmith Jr.");
+                
+                const initialMainstage = [transistor, komisar].filter(Boolean);
+                const initialKerk = [woodsmith].filter(Boolean);
                 const initialAvailable = this.allBands.filter(b => 
                     b.name !== "Transistor" && 
                     b.name !== "Komisar" && 
@@ -361,11 +404,8 @@
                     name: `Versie ${newId}`,
                     createdBy: this.currentUser,
                     createdAt: new Date().toISOString(),
-                    mainstage: [
-                        this.allBands.find(b => b.name === "Transistor"),
-                        this.allBands.find(b => b.name === "Komisar")
-                    ].filter(Boolean),
-                    kerk: [this.allBands.find(b => b.name === "Woodsmith Jr.")].filter(Boolean),
+                    mainstage: initialMainstage,
+                    kerk: initialKerk,
                     available: initialAvailable
                 });
                 this.activeScenarioId = newId;
