@@ -54,6 +54,27 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Touch-friendly drag & drop */
+        .touch-none {
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        /* Visual feedback tijdens drag */
+        [draggable="true"] {
+            cursor: grab;
+        }
+
+        [draggable="true"]:active {
+            cursor: grabbing;
+        }
+
+        /* Smooth transitions */
+        [data-drop-zone] {
+            transition: all 0.2s ease;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -83,6 +104,13 @@
                 this.isLoading = true;
                 this.CONFIG = FALLBACK_CONFIG;
                 this.allBands = [];
+                
+                // Touch support variables
+                this.touchStartY = 0;
+                this.touchStartX = 0;
+                this.isDragging = false;
+                this.draggedElement = null;
+                this.placeholder = null;
                 
                 this.init();
             }
@@ -424,6 +452,51 @@
                 this.render();
             }
 
+            // Touch event handlers for mobile drag & drop
+            handleTouchStart(e, band, source) {
+                this.isDragging = true;
+                this.draggedBand = band;
+                this.dragSource = source;
+                this.draggedElement = e.currentTarget;
+                
+                // Visual feedback
+                e.currentTarget.style.opacity = '0.5';
+                e.currentTarget.style.transform = 'scale(1.05)';
+                
+                // Prevent scrolling while dragging
+                e.preventDefault();
+            }
+
+            handleTouchMove(e) {
+                if (!this.isDragging) return;
+                e.preventDefault();
+            }
+
+            handleTouchEnd(e) {
+                if (!this.isDragging) return;
+                
+                // Reset visual feedback
+                if (this.draggedElement) {
+                    this.draggedElement.style.opacity = '1';
+                    this.draggedElement.style.transform = 'scale(1)';
+                }
+                
+                // Determine drop zone based on touch position
+                const touch = e.changedTouches[0];
+                const elementAtPoint = document.elementFromPoint(touch.clientX, touch.clientY);
+                
+                if (elementAtPoint) {
+                    const dropZone = elementAtPoint.closest('[data-drop-zone]');
+                    if (dropZone) {
+                        const targetZone = dropZone.getAttribute('data-drop-zone');
+                        this.handleDrop(targetZone);
+                    }
+                }
+                
+                this.isDragging = false;
+                this.draggedElement = null;
+            }
+
             async generatePoster() {
                 this.showPosterView = true;
                 this.render();
@@ -651,12 +724,16 @@
                                     <div 
                                         ondragover="event.preventDefault()"
                                         ondrop="app.handleDrop('mainstage')"
+                                        data-drop-zone="mainstage"
                                         class="space-y-2 sm:space-y-3 min-h-[200px] p-3 sm:p-4 bg-blue-50 rounded-2xl border-2 border-dashed border-blue-300">
                                         ${scenario.mainstage.map((band, idx) => `
                                             <div 
                                                 draggable="true"
                                                 ondragstart="app.draggedBand = ${JSON.stringify(band).replace(/"/g, '&quot;')}; app.dragSource = 'mainstage'"
-                                                class="bg-white p-3 sm:p-4 rounded-xl shadow-sm border-2 border-gray-200 cursor-move hover:border-blue-400 transition-all">
+                                                ontouchstart="app.handleTouchStart(event, ${JSON.stringify(band).replace(/"/g, '&quot;')}, 'mainstage')"
+                                                ontouchmove="app.handleTouchMove(event)"
+                                                ontouchend="app.handleTouchEnd(event)"
+                                                class="bg-white p-3 sm:p-4 rounded-xl shadow-sm border-2 border-gray-200 cursor-move hover:border-blue-400 transition-all touch-none">
                                                 <div class="flex justify-between items-start gap-2">
                                                     <div class="flex-1 min-w-0">
                                                         <div class="font-bold text-[#1a2238] text-sm sm:text-base">${idx + 1}. ${band.name}</div>
@@ -685,12 +762,16 @@
                                     <div 
                                         ondragover="event.preventDefault()"
                                         ondrop="app.handleDrop('kerk')"
+                                        data-drop-zone="kerk"
                                         class="space-y-2 sm:space-y-3 min-h-[200px] p-3 sm:p-4 bg-purple-50 rounded-2xl border-2 border-dashed border-purple-300">
                                         ${scenario.kerk.map((band, idx) => `
                                             <div 
                                                 draggable="true"
                                                 ondragstart="app.draggedBand = ${JSON.stringify(band).replace(/"/g, '&quot;')}; app.dragSource = 'kerk'"
-                                                class="bg-white p-3 sm:p-4 rounded-xl shadow-sm border-2 border-gray-200 cursor-move hover:border-purple-400 transition-all">
+                                                ontouchstart="app.handleTouchStart(event, ${JSON.stringify(band).replace(/"/g, '&quot;')}, 'kerk')"
+                                                ontouchmove="app.handleTouchMove(event)"
+                                                ontouchend="app.handleTouchEnd(event)"
+                                                class="bg-white p-3 sm:p-4 rounded-xl shadow-sm border-2 border-gray-200 cursor-move hover:border-purple-400 transition-all touch-none">
                                                 <div class="flex justify-between items-start gap-2">
                                                     <div class="flex-1 min-w-0">
                                                         <div class="font-bold text-[#1a2238] text-sm sm:text-base">${idx + 1}. ${band.name}</div>
@@ -724,12 +805,16 @@
                                             <div 
                                                 ondragover="event.preventDefault()"
                                                 ondrop="app.handleDrop('available')"
+                                                data-drop-zone="available"
                                                 class="space-y-2 p-3 bg-green-50 rounded-2xl">
                                                 ${kanshebbers.map(band => `
                                                     <div 
                                                         draggable="true"
                                                         ondragstart="app.draggedBand = ${JSON.stringify(band).replace(/"/g, '&quot;')}; app.dragSource = 'available'"
-                                                        class="bg-white p-3 rounded-xl shadow-sm border-2 border-gray-200 cursor-move hover:border-green-400 transition-all">
+                                                        ontouchstart="app.handleTouchStart(event, ${JSON.stringify(band).replace(/"/g, '&quot;')}, 'available')"
+                                                        ontouchmove="app.handleTouchMove(event)"
+                                                        ontouchend="app.handleTouchEnd(event)"
+                                                        class="bg-white p-3 rounded-xl shadow-sm border-2 border-gray-200 cursor-move hover:border-green-400 transition-all touch-none">
                                                         <div class="flex justify-between items-start gap-2">
                                                             <div class="flex-1 min-w-0">
                                                                 <div class="font-bold text-[#1a2238] text-sm">${band.name}</div>
@@ -756,12 +841,16 @@
                                             <div 
                                                 ondragover="event.preventDefault()"
                                                 ondrop="app.handleDrop('available')"
+                                                data-drop-zone="available"
                                                 class="space-y-2 p-3 bg-red-50 rounded-2xl">
                                                 ${nietVoorRoza.map(band => `
                                                     <div 
                                                         draggable="true"
                                                         ondragstart="app.draggedBand = ${JSON.stringify(band).replace(/"/g, '&quot;')}; app.dragSource = 'available'"
-                                                        class="bg-white p-3 rounded-xl shadow-sm border-2 border-gray-200 cursor-move hover:border-red-400 transition-all">
+                                                        ontouchstart="app.handleTouchStart(event, ${JSON.stringify(band).replace(/"/g, '&quot;')}, 'available')"
+                                                        ontouchmove="app.handleTouchMove(event)"
+                                                        ontouchend="app.handleTouchEnd(event)"
+                                                        class="bg-white p-3 rounded-xl shadow-sm border-2 border-gray-200 cursor-move hover:border-red-400 transition-all touch-none">
                                                         <div class="flex justify-between items-start gap-2">
                                                             <div class="flex-1 min-w-0">
                                                                 <div class="font-bold text-[#1a2238] text-sm">${band.name}</div>
