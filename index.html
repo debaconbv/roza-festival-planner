@@ -57,7 +57,6 @@
 
         /* Touch-friendly drag & drop */
         .touch-none {
-            touch-action: none;
             -webkit-user-select: none;
             user-select: none;
         }
@@ -74,6 +73,11 @@
         /* Smooth transitions */
         [data-drop-zone] {
             transition: all 0.2s ease;
+        }
+
+        /* Drop zone visual feedback */
+        [data-drop-zone].drag-over {
+            transform: scale(1.02);
         }
     </style>
 </head>
@@ -108,6 +112,7 @@
                 // Touch support variables
                 this.touchStartY = 0;
                 this.touchStartX = 0;
+                this.touchStartTime = 0;
                 this.isDragging = false;
                 this.draggedElement = null;
                 this.placeholder = null;
@@ -454,26 +459,111 @@
 
             // Touch event handlers for mobile drag & drop
             handleTouchStart(e, band, source) {
-                this.isDragging = true;
+                const touch = e.touches[0];
+                this.touchStartX = touch.clientX;
+                this.touchStartY = touch.clientY;
+                this.touchStartTime = Date.now();
+                this.isDragging = false;
                 this.draggedBand = band;
                 this.dragSource = source;
                 this.draggedElement = e.currentTarget;
                 
-                // Visual feedback
-                e.currentTarget.style.opacity = '0.5';
-                e.currentTarget.style.transform = 'scale(1.05)';
-                
-                // Prevent scrolling while dragging
-                e.preventDefault();
+                // Don't prevent default yet - allow scrolling to start
             }
 
             handleTouchMove(e) {
-                if (!this.isDragging) return;
-                e.preventDefault();
+                if (!this.draggedElement) return;
+                
+                const touch = e.touches[0];
+                const deltaX = Math.abs(touch.clientX - this.touchStartX);
+                const deltaY = Math.abs(touch.clientY - this.touchStartY);
+                const deltaTime = Date.now() - this.touchStartTime;
+                
+                // If user moved more than 10px and held for more than 200ms, it's a drag
+                if (!this.isDragging && (deltaX > 10 || deltaY > 10) && deltaTime > 200) {
+                    this.isDragging = true;
+                    
+                    // Visual feedback
+                    this.draggedElement.style.opacity = '0.5';
+                    this.draggedElement.style.transform = 'scale(1.05)';
+                    this.draggedElement.style.transition = 'all 0.2s ease';
+                    
+                    // Create visual indicator
+                    const indicator = document.createElement('div');
+                    indicator.id = 'drag-indicator';
+                    indicator.style.cssText = `
+                        position: fixed;
+                        top: ${touch.clientY - 30}px;
+                        left: ${touch.clientX - 50}px;
+                        background: #1a2238;
+                        color: white;
+                        padding: 8px 16px;
+                        border-radius: 12px;
+                        font-weight: bold;
+                        font-size: 14px;
+                        pointer-events: none;
+                        z-index: 9999;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    `;
+                    indicator.textContent = `🎵 ${this.draggedBand.name}`;
+                    document.body.appendChild(indicator);
+                }
+                
+                // If dragging, prevent scrolling and move indicator
+                if (this.isDragging) {
+                    e.preventDefault();
+                    
+                    const indicator = document.getElementById('drag-indicator');
+                    if (indicator) {
+                        indicator.style.top = `${touch.clientY - 30}px`;
+                        indicator.style.left = `${touch.clientX - 50}px`;
+                    }
+                    
+                    // Highlight drop zones
+                    const elementAtPoint = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const dropZone = elementAtPoint?.closest('[data-drop-zone]');
+                    
+                    document.querySelectorAll('[data-drop-zone]').forEach(zone => {
+                        zone.style.background = '';
+                        zone.style.borderColor = '';
+                    });
+                    
+                    if (dropZone) {
+                        const zoneName = dropZone.getAttribute('data-drop-zone');
+                        if (zoneName === 'mainstage') {
+                            dropZone.style.background = 'rgba(59, 130, 246, 0.2)';
+                            dropZone.style.borderColor = 'rgb(59, 130, 246)';
+                        } else if (zoneName === 'kerk') {
+                            dropZone.style.background = 'rgba(168, 85, 247, 0.2)';
+                            dropZone.style.borderColor = 'rgb(168, 85, 247)';
+                        } else if (zoneName === 'available') {
+                            dropZone.style.background = 'rgba(34, 197, 94, 0.2)';
+                            dropZone.style.borderColor = 'rgb(34, 197, 94)';
+                        }
+                    }
+                }
             }
 
             handleTouchEnd(e) {
-                if (!this.isDragging) return;
+                // Remove indicator
+                const indicator = document.getElementById('drag-indicator');
+                if (indicator) {
+                    indicator.remove();
+                }
+                
+                // Reset drop zone highlights
+                document.querySelectorAll('[data-drop-zone]').forEach(zone => {
+                    zone.style.background = '';
+                    zone.style.borderColor = '';
+                });
+                
+                if (!this.isDragging) {
+                    // It was just a tap, not a drag - don't do anything
+                    this.draggedBand = null;
+                    this.dragSource = null;
+                    this.draggedElement = null;
+                    return;
+                }
                 
                 // Reset visual feedback
                 if (this.draggedElement) {
@@ -490,6 +580,10 @@
                     if (dropZone) {
                         const targetZone = dropZone.getAttribute('data-drop-zone');
                         this.handleDrop(targetZone);
+                    } else {
+                        // Dropped outside valid zone - return to original
+                        this.draggedBand = null;
+                        this.dragSource = null;
                     }
                 }
                 
