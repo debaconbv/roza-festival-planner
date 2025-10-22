@@ -79,6 +79,26 @@
         [data-drop-zone].drag-over {
             transform: scale(1.02);
         }
+
+        /* Swipe feedback animation */
+        @keyframes swipeFeedback {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+            20% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1.1);
+            }
+            80% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.9);
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -477,12 +497,23 @@
                 if (!this.draggedElement) return;
                 
                 const touch = e.touches[0];
-                const deltaX = Math.abs(touch.clientX - this.touchStartX);
-                const deltaY = Math.abs(touch.clientY - this.touchStartY);
+                const deltaX = touch.clientX - this.touchStartX;
+                const deltaY = touch.clientY - this.touchStartY;
+                const absDeltaX = Math.abs(deltaX);
+                const absDeltaY = Math.abs(deltaY);
                 const deltaTime = Date.now() - this.touchStartTime;
                 
+                // Detect horizontal swipe for quick zone switch
+                if (!this.isDragging && absDeltaX > 80 && absDeltaX > absDeltaY * 2 && deltaTime < 300) {
+                    e.preventDefault();
+                    this.handleQuickSwipe(deltaX > 0 ? 'right' : 'left');
+                    this.cleanupDrag();
+                    this.draggedElement = null;
+                    return;
+                }
+                
                 // Start dragging if moved >15px and held >150ms
-                if (!this.isDragging && (deltaX > 15 || deltaY > 15) && deltaTime > 150) {
+                if (!this.isDragging && (absDeltaX > 15 || absDeltaY > 15) && deltaTime > 150) {
                     this.isDragging = true;
                     e.preventDefault();
                     
@@ -502,12 +533,68 @@
                     // Update clone position
                     this.updateDragClone(touch.clientX, touch.clientY);
                     
-                    // Check for auto-scroll
-                    this.handleAutoScroll(touch.clientY);
+                    // Handle auto-scroll with better detection
+                    this.handleAutoScroll(touch.clientX, touch.clientY);
                     
                     // Update placeholder position
                     this.updatePlaceholder(touch.clientX, touch.clientY);
                 }
+            }
+
+            handleQuickSwipe(direction) {
+                if (!this.draggedBand || !this.dragSource) return;
+                
+                const zoneOrder = ['available', 'mainstage', 'kerk'];
+                const currentIndex = zoneOrder.indexOf(this.dragSource);
+                
+                let targetZone;
+                if (direction === 'right') {
+                    // Swipe right: available → mainstage → kerk
+                    targetZone = zoneOrder[Math.min(currentIndex + 1, zoneOrder.length - 1)];
+                } else {
+                    // Swipe left: kerk → mainstage → available
+                    targetZone = zoneOrder[Math.max(currentIndex - 1, 0)];
+                }
+                
+                // Don't move if already in target zone
+                if (targetZone === this.dragSource) {
+                    this.showSwipeFeedback('❌ Al in deze zone');
+                    return;
+                }
+                
+                // Show visual feedback
+                const zoneNames = {
+                    'mainstage': '🎸 Mainstage',
+                    'kerk': '⛪ Kerk',
+                    'available': '💰 Beschikbaar'
+                };
+                this.showSwipeFeedback(`→ ${zoneNames[targetZone]}`);
+                
+                // Execute the move
+                this.handleDropAtPosition(targetZone, -1); // -1 means append to end
+            }
+
+            showSwipeFeedback(message) {
+                const feedback = document.createElement('div');
+                feedback.style.cssText = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: #1a2238;
+                    color: white;
+                    padding: 20px 40px;
+                    border-radius: 20px;
+                    font-weight: bold;
+                    font-size: 18px;
+                    z-index: 10001;
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+                    animation: swipeFeedback 0.5s ease-out;
+                `;
+                feedback.textContent = message;
+                document.body.appendChild(feedback);
+                
+                setTimeout(() => feedback.remove(), 500);
             }
 
             handleTouchEnd(e) {
@@ -619,26 +706,61 @@
                 }
             }
 
-            handleAutoScroll(touchY) {
-                const scrollThreshold = 100;
-                const scrollSpeed = 5;
+            handleAutoScroll(touchX, touchY) {
+                const scrollEdgeThreshold = 80; // pixels from edge
+                const scrollSpeed = 15; // pixels per frame
+                const scrollSpeedFast = 25; // when very close to edge
                 
+                // Clear existing interval
                 if (this.scrollInterval) {
                     clearInterval(this.scrollInterval);
                     this.scrollInterval = null;
                 }
                 
-                // Scroll up if near top
-                if (touchY < scrollThreshold) {
-                    this.scrollInterval = setInterval(() => {
-                        window.scrollBy(0, -scrollSpeed);
-                    }, 16);
+                const viewportHeight = window.innerHeight;
+                const viewportWidth = window.innerWidth;
+                const distanceFromTop = touchY;
+                const distanceFromBottom = viewportHeight - touchY;
+                const distanceFromLeft = touchX;
+                const distanceFromRight = viewportWidth - touchX;
+                
+                let scrollX = 0;
+                let scrollY = 0;
+                
+                // Vertical scrolling
+                if (distanceFromTop < scrollEdgeThreshold) {
+                    // Scroll up - faster when closer to edge
+                    const intensity = 1 - (distanceFromTop / scrollEdgeThreshold);
+                    scrollY = -(intensity > 0.5 ? scrollSpeedFast : scrollSpeed);
+                } else if (distanceFromBottom < scrollEdgeThreshold) {
+                    // Scroll down - faster when closer to edge
+                    const intensity = 1 - (distanceFromBottom / scrollEdgeThreshold);
+                    scrollY = intensity > 0.5 ? scrollSpeedFast : scrollSpeed;
                 }
-                // Scroll down if near bottom
-                else if (touchY > window.innerHeight - scrollThreshold) {
+                
+                // Horizontal scrolling (for wide screens or horizontal overflow)
+                if (distanceFromLeft < scrollEdgeThreshold) {
+                    const intensity = 1 - (distanceFromLeft / scrollEdgeThreshold);
+                    scrollX = -(intensity > 0.5 ? scrollSpeedFast : scrollSpeed);
+                } else if (distanceFromRight < scrollEdgeThreshold) {
+                    const intensity = 1 - (distanceFromRight / scrollEdgeThreshold);
+                    scrollX = intensity > 0.5 ? scrollSpeedFast : scrollSpeed;
+                }
+                
+                // Start scrolling if needed
+                if (scrollX !== 0 || scrollY !== 0) {
                     this.scrollInterval = setInterval(() => {
-                        window.scrollBy(0, scrollSpeed);
-                    }, 16);
+                        window.scrollBy(scrollX, scrollY);
+                        
+                        // Also update clone position during scroll to keep it at finger position
+                        const clone = document.getElementById('drag-clone');
+                        if (clone && this.isDragging) {
+                            const currentTop = parseFloat(clone.style.top);
+                            const currentLeft = parseFloat(clone.style.left);
+                            clone.style.top = `${currentTop + scrollY}px`;
+                            clone.style.left = `${currentLeft + scrollX}px`;
+                        }
+                    }, 16); // ~60fps
                 }
             }
 
@@ -657,13 +779,25 @@
                     newKerk = newKerk.filter(b => b.name !== this.draggedBand.name);
                 }
 
-                // Add to target at specific position
+                // Add to target at specific position (-1 means append to end)
                 if (targetZone === 'mainstage') {
-                    newMainstage.splice(targetIndex, 0, this.draggedBand);
+                    if (targetIndex === -1) {
+                        newMainstage.push(this.draggedBand);
+                    } else {
+                        newMainstage.splice(targetIndex, 0, this.draggedBand);
+                    }
                 } else if (targetZone === 'kerk') {
-                    newKerk.splice(targetIndex, 0, this.draggedBand);
+                    if (targetIndex === -1) {
+                        newKerk.push(this.draggedBand);
+                    } else {
+                        newKerk.splice(targetIndex, 0, this.draggedBand);
+                    }
                 } else if (targetZone === 'available') {
-                    newAvailable.splice(targetIndex, 0, this.draggedBand);
+                    if (targetIndex === -1) {
+                        newAvailable.push(this.draggedBand);
+                    } else {
+                        newAvailable.splice(targetIndex, 0, this.draggedBand);
+                    }
                 }
 
                 scenario.mainstage = newMainstage;
